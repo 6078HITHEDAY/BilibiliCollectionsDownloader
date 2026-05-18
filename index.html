@@ -303,6 +303,8 @@
       .card { padding: 18px 16px; }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 </head>
 <body>
 
@@ -643,10 +645,17 @@
         function renderPreview() {
           preview.innerHTML = '';
           let hasContent = false;
+          // 去重：避免同一类型相同 URL 被渲染多次
+          const seen = new Set();
           for (const dl of card.links) {
+            const key = (dl.cls || '') + '|' + (dl.url || '');
+            if (seen.has(key)) continue;
+            seen.add(key);
+
             if (activeType === 'img' && dl.cls === 'dl-a-img') {
               const img = document.createElement('img');
-              img.src = dl.url;
+              // 使用后端代理加载图片，避免浏览器长按保存为 HTML（代理需返回正确的 image/* Content-Type）
+              img.src = `/api/proxy_img?url=${encodeURIComponent(dl.url)}`;
               img.alt = '图片预览';
               img.loading = 'lazy';
               img.referrerPolicy = 'no-referrer';
@@ -808,55 +817,181 @@
      Download all (open links sequentially)
   ============================================================ */
   // 批量下载所有资源（图片/视频）
-  function downloadAll() {
-    if (!state.allLinks.length) return;
-    // 读取复选框状态
-    const chkImg = document.getElementById('dl-chk-img').checked;
-    const chkVid = document.getElementById('dl-chk-vid').checked;
-    const chkWm  = document.getElementById('dl-chk-wm').checked;
-    // 过滤类型
-    const typeMap = {
-      'dl-a-img': chkImg,
-      'dl-a-vid': chkVid,
-      'dl-a-wm': chkWm
-    };
-    const links = state.allLinks.filter(link => typeMap[link.type]);
-    if (!links.length) {
-      alert('请至少选择一种资源类型');
-      return;
-    }
-    let delay = 0;
-    for (const link of links) {
-      setTimeout(() => {
-        let fetchUrl = link.url;
-        // 仅图片通过后端代理
-        if (link.type === 'dl-a-img') {
-          fetchUrl = `/api/proxy_img?url=${encodeURIComponent(link.url)}`;
+  async function downloadAll() {
+      if (!state.allLinks.length) {
+        return;
+      }
+
+      const chkImg = document.getElementById('dl-chk-img').checked;
+      const chkVid = document.getElementById('dl-chk-vid').checked;
+      const chkWm = document.getElementById('dl-chk-wm').checked;
+
+      const typeMap = {
+        'dl-a-img': chkImg,
+        'dl-a-vid': chkVid,
+        'dl-a-wm': chkWm
+      };
+
+      // =========================
+      // URL 去重
+      // =========================
+
+      const seen = new Set();
+
+      const links = state.allLinks.filter(link => {
+        if (!typeMap[link.type]) {
+          return false;
         }
-        fetch(fetchUrl)
-          .then(resp => {
-            if (!resp.ok) throw new Error('下载失败');
-            return resp.blob();
-          })
-          .then(blob => {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = link.filename;
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => {
-              document.body.removeChild(a);
-              URL.revokeObjectURL(url);
-            }, 100);
-          })
-          .catch(err => {
-            alert('下载失败: ' + link.filename + '\n' + err);
-          });
-      }, delay);
-      delay += 350; // 避免浏览器拦截
+
+        const key = link.type + "|" + link.url;
+
+        if (seen.has(key)) {
+          return false;
+        }
+
+        seen.add(key);
+
+        return true;
+      });
+
+      if (!links.length) {
+        alert('请至少选择一种资源类型');
+        return;
+      }
+
+      // =========================
+      // 文件名冲突处理
+      // =========================
+
+      const filenameCount = new Map();
+
+      for (const link of links) {
+        const count = filenameCount.get(link.filename) || 0;
+
+        if (count > 0) {
+          const dotIndex = link.filename.lastIndexOf('.');
+
+          if (dotIndex !== -1) {
+            const name = link.filename.slice(0, dotIndex);
+            const ext = link.filename.slice(dotIndex);
+
+            link.filename = `${name}(${count})${ext}`;
+          }
+          else {
+            link.filename = `${link.filename}(${count})`;
+          }
+        }
+
+        filenameCount.set(link.filename, count + 1);
+      }
+
+      // =========================
+      // 创建 ZIP
+      // =========================
+
+      const zip = new JSZip();
+
+      let done = 0;
+
+      const CONCURRENT = 5;
+
+      let index = 0;
+
+      async function worker() {
+        while (true) {
+          const current = index++;
+
+          if (current >= links.length) {
+            return;
+          }
+
+          const link = links[current];
+
+          try {
+            let fetchUrl = link.url;
+
+            // 图片走代理
+            if (link.type === 'dl-a-img') {
+              fetchUrl = `/api/proxy_img?url=${encodeURIComponent(link.url)}`;
+            }
+
+            const resp = await fetch(fetchUrl);
+
+            if (!resp.ok) {
+              throw new Error(`HTTP ${resp.status}`);
+            }
+
+            const blob = await resp.blob();
+
+            zip.file(link.filename, blob);
+
+            done++;
+
+            console.log(`已添加 ${done}/${links.length}: ${link.filename}`);
+          }
+          catch (err) {
+            console.error('下载失败:', link.filename, err);
+          }
+        }
+      }
+
+      // 并发下载
+      await Promise.all(
+        Array.from(
+          { length: CONCURRENT },
+          () => worker()
+        )
+      );
+
+      // =========================
+      // 生成 ZIP
+      // =========================
+
+      const zipBlob = await zip.generateAsync({
+        type: 'blob'
+      });
+
+      // =========================
+      // ZIP 名字
+      // =========================
+
+      const typeNames = [];
+
+      if (chkImg) {
+        typeNames.push('图片');
+      }
+
+      if (chkVid) {
+        typeNames.push('视频');
+      }
+
+      if (chkWm) {
+        typeNames.push('水印视频');
+      }
+
+      const typeSuffix =
+        typeNames.length === 3
+          ? '全部'
+          : typeNames.join('+');
+
+      let zipName = 'B站收藏集';
+
+      if (window._allCollections && window._allCollections.length === 1) {
+        zipName = window._allCollections[0].name || zipName;
+      }
+      else if (window._allCollections && window._allCollections.length > 1) {
+        zipName = `B站收藏集_${window._allCollections.length}个合集`;
+      }
+
+      const safeZipName = zipName
+        .replace(/[<>:"/\\|?*]/g, '_')
+        .trim();
+
+      saveAs(
+        zipBlob,
+        `${safeZipName}_${typeSuffix}.zip`
+      );
     }
-  }
 
   /* ============================================================
      Clear all
