@@ -1407,8 +1407,47 @@
 
           const safeZipName = zipName.replace(/[<>:"/\\|?*]/g, "_").trim();
 
-          saveAs(zipBlob, `${safeZipName}_${typeSuffix}.zip`);
-          setZipProgress("下载完成");
+          const finalZipName = `${safeZipName}_${typeSuffix}.zip`;
+          saveAs(zipBlob, finalZipName);
+
+          // 仅在 app 模式下才上传到后端并写入应用目录（默认不上传）
+          function isAppMode() {
+            try {
+              if (typeof window.pywebview !== "undefined") return true;
+            } catch (e) {}
+            try {
+              const params = new URLSearchParams(location.search);
+              if (params.get("app") === "1") return true;
+            } catch (e) {}
+            return false;
+          }
+
+          if (isAppMode()) {
+            try {
+              setZipProgress("正在保存到应用目录...");
+              const fd = new FormData();
+              fd.append("file", zipBlob, finalZipName);
+              fd.append("filename", finalZipName);
+
+              const resp = await fetch("/api/save_zip", {
+                method: "POST",
+                body: fd,
+              });
+
+              const j = await resp.json();
+              if (j && j.code === 0) {
+                setZipProgress(`已保存到：${j.path}`);
+              } else {
+                console.error("保存到后端失败:", j);
+                setZipProgress("已生成压缩包（客户端保存）");
+              }
+            } catch (err) {
+              console.error("上传压缩包失败:", err);
+              setZipProgress("已生成压缩包（客户端保存）");
+            }
+          } else {
+            setZipProgress("下载完成（未上传）");
+          }
 
           btn.disabled = false;
         } finally {

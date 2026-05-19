@@ -6,6 +6,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 import requests as req_lib
 from flask import Flask, jsonify, request, send_file
+import re
 from bilibili_api import sync, ResponseCodeException, NetworkException
 from bilibili_api.garb import DLC
 from bilibili_api.utils.network import Api
@@ -319,6 +320,39 @@ def resolve_url():
     except Exception as e:
         LOGGER.error(f"URL 解析失败: {url!r} | {e}", exc_info=True)
         return jsonify({"code": -1, "message": "URL 解析失败"}), 502
+
+
+@app.route("/api/save_zip", methods=["POST"])
+def save_zip():
+    """
+    接收前端上传的 ZIP 文件并保存到应用的 `downloads` 目录。
+    前端应提交 multipart/form-data，字段名为 `file`，可选 `filename`。
+    返回 JSON: {code:0, path: saved_path}
+    """
+    try:
+        file = request.files.get("file")
+        filename = request.form.get("filename") or (file.filename if file else None) or "archive.zip"
+
+        # 安全化文件名
+        filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
+        filename = filename.strip() or 'archive.zip'
+
+        save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "downloads")
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, filename)
+
+        if file:
+            file.save(save_path)
+        else:
+            # 如果没有 multipart 文件，尝试写入原始请求体
+            with open(save_path, "wb") as fh:
+                fh.write(request.get_data())
+
+        LOGGER.info(f"已保存压缩包: {save_path}")
+        return jsonify({"code": 0, "path": save_path})
+    except Exception as e:
+        LOGGER.error("保存 ZIP 失败", exc_info=True)
+        return jsonify({"code": -1, "message": "保存失败"}), 500
 
 
 if __name__ == "__main__":

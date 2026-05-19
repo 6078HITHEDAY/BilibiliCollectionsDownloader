@@ -55,7 +55,7 @@ def main():
 
     window = webview.create_window(
         title="B 站收藏集下载器",
-        url=f"http://127.0.0.1:{port}/",
+        url=f"http://127.0.0.1:{port}/?app=1",
         width=1100,
         height=820,
         resizable=True,
