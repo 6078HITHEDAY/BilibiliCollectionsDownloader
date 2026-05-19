@@ -1,4 +1,4 @@
-name: Build Windows Release
+name: Build Portable Package
 
 permissions:
   contents: write
@@ -21,13 +21,12 @@ on:
       - "v*"
 
 jobs:
-  build-windows:
+  build-portable:
     runs-on: windows-latest
     env:
       PYTHON_VERSION: "3.12.7"
       ARTIFACT_DIR: "artifacts"
       PORTABLE_DIR: "artifacts/portable"
-      APP_EXE: "dist/BiliCollectionDownloader.exe"
 
     steps:
       - name: Checkout
@@ -38,16 +37,16 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dependencies
+      - name: Install dependencies for validation
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install -r dev-requirements.txt
 
-      - name: Build EXE
+      - name: Syntax check
         shell: pwsh
-        run: pyinstaller build.spec
+        run: python -m py_compile app.py server.py run_web.py web.py
 
       - name: Build portable package
         shell: pwsh
@@ -82,18 +81,13 @@ jobs:
           & $pythonExe -m pip install --upgrade pip
           & $pythonExe -m pip install -r requirements.txt
 
-          $requiredFiles = @("run_web.py", "server.py", "index.html", "requirements.txt", "README.md", "start.bat", "start.ps1")
+          $requiredFiles = @("app.py", "server.py", "run_web.py", "web.py", "index.html", "requirements.txt", "README.md", "start.bat", "start.ps1")
           foreach ($file in $requiredFiles) {
             if (-not (Test-Path $file)) {
               throw "Required file is missing: $file (expected in $PWD)"
             }
           }
 
-          if (-not (Test-Path "${{ env.APP_EXE }}")) {
-            throw "Built executable is missing: ${{ env.APP_EXE }}"
-          }
-
-          Copy-Item "${{ env.APP_EXE }}" $portableDir -Force
           Copy-Item $requiredFiles -Destination $portableDir -Force
 
           $portableZip = Join-Path $artifactDir "BilibiliCollectionsDownloader-portable-windows.zip"
@@ -102,16 +96,10 @@ jobs:
           }
           Compress-Archive -Path $portableDir -DestinationPath $portableZip -Force
 
-      - name: Upload EXE artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: BiliCollectionDownloader-exe
-          path: ${{ env.APP_EXE }}
-
       - name: Upload portable artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BiliCollectionDownloader-portable
+          name: BilibiliCollectionsDownloader-portable
           path: artifacts/BilibiliCollectionsDownloader-portable-windows.zip
 
       - name: Resolve release tag
@@ -133,6 +121,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_tag.outputs.tag }}
-          files: |
-            ${{ env.APP_EXE }}
-            artifacts/BilibiliCollectionsDownloader-portable-windows.zip
+          files: artifacts/BilibiliCollectionsDownloader-portable-windows.zip

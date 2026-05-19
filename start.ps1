@@ -15,8 +15,6 @@ if ([string]::IsNullOrEmpty($scriptPath)) {
 else {
     $root = Split-Path -Parent $scriptPath
 }
-$exeName = "BiliCollectionDownloader.exe"
-$exePath = Join-Path $root $exeName
 $embeddedPython = Join-Path $root "python\python.exe"
 $appScript = Join-Path $root "app.py"
 $webScript = Join-Path $root "run_web.py"
@@ -38,19 +36,20 @@ while ($true) {
     $mode = Read-Host "请选择启动模式"
 
     if ($mode -eq "1") {
-        if (Test-Path $exePath) {
-            & $exePath
-            $exitCode = $LASTEXITCODE
-            break
-        }
-
         if (Test-Path $embeddedPython) {
             & $embeddedPython $appScript
             $exitCode = $LASTEXITCODE
             break
         }
 
-        Write-Host "未找到 $exeName 或嵌入式 Python 环境。"
+        $systemPython = Get-Command python -ErrorAction SilentlyContinue
+        if ($systemPython) {
+            & $systemPython.Path $appScript
+            $exitCode = $LASTEXITCODE
+            break
+        }
+
+        Write-Host "未找到嵌入式 Python 环境或可用的系统 Python 解释器。"
         $exitCode = 1
         break
     }

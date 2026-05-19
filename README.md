@@ -15,19 +15,18 @@
 
 | 模式 | 特点 | 适用场景 |
 | ------ | ------ | -------- |
-| 服务端模式 | 轻量 Flask、后端代理、无 CORS 限制 | **推荐** 日常使用 |
-| 网页界面 | 浏览器访问、本地服务提供 API、交互直观 | 日常网页操作 |
-| 命令行版 | 批量处理、自动化下载 | 批量操作 |
-| 桌面应用 | EXE 打包、原生窗口、一键运行 | Windows 用户 |
+| 桌面应用 | 嵌入式 Python、原生窗口、一键运行 | **推荐** Windows 用户 |
+| 网页界面 | 浏览器访问、本地服务、交互直观 | 日常网页操作 |
+| 服务端模式 | Flask 后端代理、无 CORS 限制 | API 调用 |
 
 ---
 
-## 桌面应用模式（EXE 打包）
+## 桌面应用模式（嵌入式 Python）
 
 ### 特点
 
 - **原生窗口** — 使用 `pywebview` 嵌套 Flask，系统原生窗口渲染
-- **一键运行** — 单个 `BiliCollectionDownloader.exe`，无需安装 Python
+- **一键运行** — 使用 `python/` 内嵌运行时，无需安装 Python
 - **解决 CORS** — 本地 Flask 代理转发 B 站 API，无跨域限制
 
 ### 快速开始
@@ -37,11 +36,8 @@
 pip install -r requirements.txt
 pip install pyinstaller "pywebview[edgechromium]"
 
-# 2. 打包
-pyinstaller build.spec
-
-# 3. 运行
-# 输出文件：dist/BiliCollectionDownloader.exe
+# 2. 运行
+# 依赖内嵌 Python 运行时，无需额外打包
 ```
 
 ### 直接运行（不打包）
@@ -172,7 +168,7 @@ python main.py
 .\start.bat
 ```
 
-> **说明**：打包后的 EXE 仅保留桌面窗口模式，不再提供 `--cli` 终端模式；如果需要命令行交互，请直接运行 `python main.py`。
+> **说明**：便携包使用内嵌 Python 运行时启动桌面窗口模式；如果需要命令行交互，请直接运行 `python main.py`。
 
 ### 下载文件结构
 
@@ -199,7 +195,6 @@ dlc/
 ├── main.py                   # 命令行版主程序
 ├── requirements.txt          # 运行时依赖
 ├── dev-requirements.txt      # 开发依赖
-├── build.spec                # PyInstaller 打包配置
 ├── start.bat                 # 启动器（调用 start.ps1）
 ├── start.ps1                 # 启动菜单脚本（PowerShell）
 ├── qrcodes/                  # 二维码存放目录（运行时自动创建）
@@ -210,10 +205,9 @@ dlc/
 └── logs/                     # 日志目录（自动创建）
 ```
 
-### 编译版本（预构建 EXE）
+### 便携版本（内嵌 Python）
 
 ```shell
-├── BiliCollectionDownloader.exe                # 可执行程序
 ├── start.bat                                   # 启动器（调用 start.ps1）
 ├── start.ps1                                   # 启动菜单脚本（PowerShell）
 ├── python/                                     # 嵌入式 Python 运行时

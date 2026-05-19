@@ -1,12 +1,9 @@
 """
-app.py — B 站收藏集下载器桌面客户端入口
+app.py — B 站收藏集下载器桌面客户端
 
 运行方式：
-  python app.py          # 启动 pywebview 原生窗口（默认）
-
-打包方式（生成单 EXE）：
-  pip install pyinstaller pywebview
-  pyinstaller build.spec
+  python app.py           # 启动 pywebview 原生窗口（推荐）
+  python start.ps1        # Windows 便携包启动器
 """
 
 import sys
