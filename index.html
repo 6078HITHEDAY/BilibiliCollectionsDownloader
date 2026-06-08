@@ -704,7 +704,20 @@
         const state = {
             allLinks: [], // { url: string, filename: string }
         };
-
+        /**
+         * Auto-detect the API base path from the current URL.
+         *
+         * When running behind Apache reverse proxy (e.g., /bili/),
+         * all API/asset URLs must be prefixed with the same path.
+         * When running standalone at the root (/), no prefix is needed.
+         *
+         * Detection: if the first non-empty path component is a known
+         * deployment prefix ("bili"), use it. Otherwise assume root.
+         */
+        const API_BASE = (() => {
+            const first = location.pathname.replace(/\/+$/, '').split('/')[1];
+            return first === "bili" ? "/bili" : "";
+        })();
         /* ============================================================
        QR code handling
     ============================================================ */
@@ -747,7 +760,7 @@
             if (/^https?:\/\//i.test(text)) {
                 try {
                     const res = await fetch(
-                        `api/resolve_url?url=${encodeURIComponent(text)}`,
+                        `${API_BASE}/api/resolve_url?url=${encodeURIComponent(text)}`,
                     );
                     const json = await res.json();
                     if (json.code === 0 && json.url) {
@@ -812,7 +825,7 @@
     ============================================================ */
         async function fetchCollection(act_id, lottery_id) {
             const res = await fetch(
-                `api/fetch?act_id=${encodeURIComponent(act_id)}&lottery_id=${encodeURIComponent(lottery_id)}`,
+                `${API_BASE}/api/fetch?act_id=${encodeURIComponent(act_id)}&lottery_id=${encodeURIComponent(lottery_id)}`,
             );
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             return res.json();
@@ -1038,7 +1051,7 @@
                             if (activeType === "img" && dl.cls === "dl-a-img") {
                                 const img = document.createElement("img");
                                 // 使用后端代理加载图片，避免浏览器长按保存为 HTML（代理需返回正确的 image/* Content-Type）
-                                img.src = `api/proxy_img?url=${encodeURIComponent(dl.url)}`;
+                                img.src = `${API_BASE}/api/proxy_img?url=${encodeURIComponent(dl.url)}`;
                                 img.alt = "图片预览";
                                 img.loading = "lazy";
                                 img.referrerPolicy = "no-referrer";
@@ -1162,7 +1175,7 @@
             let allParams = [];
             try {
                 const res = await fetch(
-                    `api/get_params?act_id=${encodeURIComponent(actId)}`,
+                    `${API_BASE}/api/get_params?act_id=${encodeURIComponent(actId)}`,
                 );
                 const json = await res.json();
                 if (json.code !== 0) {
@@ -1360,7 +1373,7 @@
                             setZipProgress(`正在保存 ${i + 1}/${links.length}：${link.filename}`);
 
                             try {
-                                const resp = await fetch("/api/save_file", {
+                                const resp = await fetch(`${API_BASE}/api/save_file`, {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({ item: link }),
@@ -1434,7 +1447,7 @@
 
                             // 图片走代理
                             if (link.type === "dl-a-img") {
-                                fetchUrl = `api/proxy_img?url=${encodeURIComponent(link.url)}`;
+                                fetchUrl = `${API_BASE}/api/proxy_img?url=${encodeURIComponent(link.url)}`;
                             }
 
                             const resp = await fetch(fetchUrl);
