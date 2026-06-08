@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
+/server.conf
 # Distribution / build
 dist/
 build/
